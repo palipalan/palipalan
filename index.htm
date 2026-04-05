@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nabla&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nabla&family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
         body { 
             margin: 0; 
@@ -78,62 +78,6 @@
             0% { opacity: 0.27; } 50% { opacity: 0.35; } 100% { opacity: 0.24; }
         }
 
-        /* --- DISPLAY DO ROBO --- */
-        .robot-screen {
-            background: #000d04;
-            border: 2px solid #0d2010;
-            border-radius: 10px;
-            padding: 30px 28px 10px; 
-            box-sizing: border-box; 
-            box-shadow:
-                inset 0 0 40px rgba(0,50,0,0.8),
-                inset 0 2px 8px rgba(0,0,0,0.9),
-                0 0 18px rgba(0,80,0,0.35);
-            font-family: 'Courier New', monospace;
-            color: #00e060;
-            text-shadow: 0 0 9px #00e060, 0 0 18px rgba(0,224,96,0.45);
-            text-align: center;
-            line-height: 1.4;
-            width: 260px;
-            position: relative;
-            pointer-events: none;
-        }
-
-        .robot-screen::after {
-            content: '';
-            position: absolute; inset: 0;
-            background: repeating-linear-gradient(
-                0deg, transparent 0px, transparent 2px,
-                rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 3px
-            );
-            border-radius: 8px;
-            pointer-events: none;
-        }
-
-        .robot-face-line {
-            font-size: 1.5rem; letter-spacing: 4px;
-            display: block;
-            transition: all 0.1s;
-        }
-
-        .robot-status-line {
-            font-size: 0.62rem; letter-spacing: 3px;
-            color: rgba(0,224,96,0.6);
-            display: block;
-            min-height: 0.85rem;
-            margin-top: 4px;
-            text-transform: uppercase;
-        }
-
-        .robot-label { 
-            font-size: 0.44rem; 
-            letter-spacing: 2px; 
-            color: #1e2e1c; 
-            text-transform: uppercase; 
-            display: block; 
-            margin-top: 8px;
-        }
-
     </style>
     <script type="importmap">
       {
@@ -157,7 +101,7 @@
 
     <div id="canvas-container" class="absolute inset-0" style="z-index: 10;"></div>
 
-    <div class="absolute inset-x-0 top-0 pointer-events-none flex justify-center pt-8 md:pt-16 lg:pt-20" style="z-index: 20;">
+    <div id="intro-text" class="absolute inset-x-0 top-0 pointer-events-none flex justify-center pt-8 md:pt-16 lg:pt-20" style="z-index: 20; opacity: 0; transition: opacity 3s ease-in-out;">
         <div class="wave-text">
             <span>p</span><span>a</span><span>l</span><span>i</span><span>p</span><span>a</span><span>l</span><span>a</span><span>n</span>
         </div>
@@ -227,7 +171,7 @@
         scene.fog = new THREE.FogExp2(fogColor, 0.015); // Névoa significativamente reduzida para ver as estrelas ao fundo
 
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-        camera.position.set(0, 3, 10); 
+        camera.position.set(0, 15, 60);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setClearColor(0x000000, 0); 
@@ -255,6 +199,9 @@
         controls.minAzimuthAngle = -Math.PI / 3;
         controls.maxAzimuthAngle = Math.PI / 3;
         controls.target.set(0, 1.5, 0);
+        controls.enabled = false;
+        let isIntroPlaying = true;
+        const targetCamPos = new THREE.Vector3(0, 3, 10);
 
         const ambientLight = new THREE.AmbientLight(0x404040, 4.0);
         scene.add(ambientLight);
@@ -745,28 +692,69 @@
         tvGroup.add(tvHardwareGroup);
 
 
-        // --- DISPLAY REATIVO (SENSORY MODULE) NO RACK ---
-        // Moldura metálica skeuomorfista para o display do robô
-        const trimGeo = new THREE.BoxGeometry(1.35, 0.45, 0.05);
-        const trimMat = new THREE.MeshStandardMaterial({color: 0x333333, metalness: 0.8, roughness: 0.4});
-        const trimMesh = new THREE.Mesh(trimGeo, trimMat);
-        trimMesh.position.set(-0.8, 0.4, 0.95);
-        tvGroup.add(trimMesh);
+        // --- ENTRADA VHS E FITA ---
+        const vhsFrameGeo = new THREE.BoxGeometry(1.8, 0.45, 0.05);
+        const vhsFrameMat = new THREE.MeshStandardMaterial({color: 0x1a1a1a, roughness: 0.8});
+        const vhsFrame = new THREE.Mesh(vhsFrameGeo, vhsFrameMat);
+        vhsFrame.position.set(-0.8, 0.4, 0.95);
+        tvGroup.add(vhsFrame);
 
-        const robotDiv = document.createElement('div');
-        robotDiv.className = 'robot-screen';
-        robotDiv.innerHTML = `
-            <span class="robot-face-line" id="robot-face">^ _ ^</span>
-            <span class="robot-status-line" id="robot-status">AGUARDANDO BATIDA</span>
-            <span class="robot-label">ANALISADOR DE FREQUÊNCIA</span>
-        `;
-        const robotObj = new CSS3DObject(robotDiv);
-        robotObj.scale.set(0.005, 0.005, 0.005);
-        robotObj.position.set(-0.8, 0.4, 0.96); 
-        tvGroup.add(robotObj);
+        const vhsHoleGeo = new THREE.BoxGeometry(1.6, 0.22, 0.06);
+        const vhsHoleMat = new THREE.MeshBasicMaterial({color: 0x000000});
+        const vhsHole = new THREE.Mesh(vhsHoleGeo, vhsHoleMat);
+        vhsHole.position.set(-0.8, 0.4, 0.96);
+        tvGroup.add(vhsHole);
 
-        const faceEl = robotDiv.querySelector('#robot-face');
-        const statusEl = robotDiv.querySelector('#robot-status');
+        const vhsTapeGroup = new THREE.Group();
+        vhsTapeGroup.position.set(-0.8, 0.4, 1.05);
+
+        const tapeGeo = new THREE.BoxGeometry(1.4, 0.20, 0.9);
+        const tapeMat = new THREE.MeshStandardMaterial({color: 0x121212, roughness: 0.7, metalness: 0.1});
+        const tapeMesh = new THREE.Mesh(tapeGeo, tapeMat);
+        tapeMesh.castShadow = true;
+        vhsTapeGroup.add(tapeMesh);
+
+        const labelGeo = new THREE.PlaneGeometry(1.15, 0.45);
+        const labelCanvas = document.createElement('canvas');
+        labelCanvas.width = 512; labelCanvas.height = 200;
+        const lctx = labelCanvas.getContext('2d');
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        labelTexture.colorSpace = THREE.SRGBColorSpace;
+
+        function drawLabel() {
+            lctx.fillStyle = '#eae6cf';
+            lctx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+            lctx.fillStyle = '#ba1a1a';
+            lctx.fillRect(0, labelCanvas.height - 36, labelCanvas.width, 36);
+            lctx.font = '28px "Permanent Marker", cursive';
+            lctx.fillStyle = '#111118';
+            lctx.textAlign = 'center';
+            lctx.textBaseline = 'middle';
+            lctx.save();
+            lctx.translate(labelCanvas.width / 2, labelCanvas.height / 2 + 15);
+            lctx.rotate(-0.03);
+            lctx.fillText('Palipalan // #30dias30beats', 0, 0);
+            lctx.restore();
+            labelTexture.needsUpdate = true;
+        }
+        drawLabel();
+        document.fonts.ready.then(drawLabel);
+
+        const labelMat = new THREE.MeshStandardMaterial({map: labelTexture, roughness: 0.9});
+        const labelMesh = new THREE.Mesh(labelGeo, labelMat);
+        labelMesh.rotation.x = -Math.PI / 2;
+        labelMesh.position.set(0, 0.101, 0.15);
+        vhsTapeGroup.add(labelMesh);
+
+        const spoolGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.01, 16);
+        const spoolMat = new THREE.MeshStandardMaterial({color: 0x050505, roughness: 0.5});
+        const spool1 = new THREE.Mesh(spoolGeo, spoolMat);
+        spool1.position.set(-0.35, 0.102, -0.05);
+        vhsTapeGroup.add(spool1);
+        const spool2 = new THREE.Mesh(spoolGeo, spoolMat);
+        spool2.position.set(0.35, 0.102, -0.05);
+        vhsTapeGroup.add(spool2);
+        tvGroup.add(vhsTapeGroup);
 
         const controlsGroup = new THREE.Group();
         const knobBaseGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.02, 16); knobBaseGeo.rotateX(Math.PI / 2);
@@ -804,8 +792,22 @@
             if (rugMat.userData.shader) rugMat.userData.shader.uniforms.time.value = time;
             smokeMat.uniforms.time.value = time;
             
-            // Rotação suave do céu estrelado
             starField.rotation.y = time * 0.02;
+
+            // --- ANIMAÇÃO DE ENTRADA ---
+            if (isIntroPlaying) {
+                camera.position.lerp(targetCamPos, 0.015);
+                camera.lookAt(0, 1.5, 0);
+                if (camera.position.distanceTo(targetCamPos) < 0.5) {
+                    isIntroPlaying = false;
+                    controls.enabled = true;
+                    controls.update();
+                    const introText = document.getElementById('intro-text');
+                    if (introText) introText.style.opacity = '1';
+                }
+            } else {
+                controls.update();
+            }
 
             // Lógica de Sincronização Contínua dos Vídeos (Micro-ajustes de velocidade)
             if (isYtReady && playerTv && playerBg && playerTv.getPlayerState && playerBg.getPlayerState) {
@@ -838,34 +840,11 @@
                 mesh.position.z = 0.96 + intensity * 0.03; 
             });
 
-            if (faceEl && statusEl && Math.floor(time * 12) % 3 === 0) { 
-                if (randomSpike > 0.5) { 
-                    faceEl.innerText = "O _ O"; 
-                    statusEl.innerText = "PICO DE GRAVE!";
-                    faceEl.style.color = "#ff0055";
-                    faceEl.style.textShadow = "0 0 9px #ff0055";
-                } else if (beat1 > 0.8) { 
-                    faceEl.innerText = "> _ <"; 
-                    statusEl.innerText = "LENDO BATIDA...";
-                    faceEl.style.color = "#00e060";
-                    faceEl.style.textShadow = "0 0 9px #00e060";
-                } else if (beat2 > 0.7) { 
-                    faceEl.innerText = "^ _ ^"; 
-                    statusEl.innerText = "SINCRONIZADO";
-                } else {
-                    faceEl.innerText = "- _ -";
-                    statusEl.innerText = "AGUARDANDO BATIDA";
-                    faceEl.style.color = "#00e060";
-                    faceEl.style.textShadow = "0 0 9px #00e060";
-                }
-            }
-
             const pulse = Math.sin(time * 3);
             beamLight.intensity = 30.0 + pulse * 10.0;
             beamMat.uniforms.beamOpacity.value = 0.08 + pulse * 0.03;
             tvLight.intensity = 1.5 + Math.random() * 0.4;
 
-            controls.update();
             renderer.render(scene, camera);
             cssRenderer.render(scene, camera); 
         }
