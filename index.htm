@@ -688,6 +688,19 @@
         tvLight.castShadow = true;
         tvHardwareGroup.add(tvLight);
 
+        // --- ADESIVO NA LATERAL DA TV ---
+        const stickerTexture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/palipalan/palipalan/main/30D30B26_X.png');
+        stickerTexture.colorSpace = THREE.SRGBColorSpace;
+        const stickerMat = new THREE.MeshStandardMaterial({
+            map: stickerTexture, transparent: true, roughness: 0.8, metalness: 0.1, alphaTest: 0.05
+        });
+        const stickerGeo = new THREE.PlaneGeometry(0.8, 0.8);
+        const stickerMesh = new THREE.Mesh(stickerGeo, stickerMat);
+        stickerMesh.position.set(-1.51, 2.2, -1.1);
+        stickerMesh.rotation.y = -Math.PI / 2;
+        stickerMesh.rotation.z = 0.15;
+        tvHardwareGroup.add(stickerMesh);
+
         // Adiciona a TV completa e escalada ao grupo principal
         tvGroup.add(tvHardwareGroup);
 
