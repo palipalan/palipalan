@@ -7,7 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Nabla&display=swap" rel="stylesheet">
+    <!-- Adicionada a fonte Permanent Marker para a escrita da fita -->
+    <link href="https://fonts.googleapis.com/css2?family=Nabla&family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
         body { 
             margin: 0; 
@@ -78,62 +79,6 @@
             0% { opacity: 0.27; } 50% { opacity: 0.35; } 100% { opacity: 0.24; }
         }
 
-        /* --- DISPLAY DO ROBO --- */
-        .robot-screen {
-            background: #000d04;
-            border: 2px solid #0d2010;
-            border-radius: 10px;
-            padding: 30px 28px 10px; 
-            box-sizing: border-box; 
-            box-shadow:
-                inset 0 0 40px rgba(0,50,0,0.8),
-                inset 0 2px 8px rgba(0,0,0,0.9),
-                0 0 18px rgba(0,80,0,0.35);
-            font-family: 'Courier New', monospace;
-            color: #00e060;
-            text-shadow: 0 0 9px #00e060, 0 0 18px rgba(0,224,96,0.45);
-            text-align: center;
-            line-height: 1.4;
-            width: 260px;
-            position: relative;
-            pointer-events: none;
-        }
-
-        .robot-screen::after {
-            content: '';
-            position: absolute; inset: 0;
-            background: repeating-linear-gradient(
-                0deg, transparent 0px, transparent 2px,
-                rgba(0,0,0,0.12) 2px, rgba(0,0,0,0.12) 3px
-            );
-            border-radius: 8px;
-            pointer-events: none;
-        }
-
-        .robot-face-line {
-            font-size: 1.5rem; letter-spacing: 4px;
-            display: block;
-            transition: all 0.1s;
-        }
-
-        .robot-status-line {
-            font-size: 0.62rem; letter-spacing: 3px;
-            color: rgba(0,224,96,0.6);
-            display: block;
-            min-height: 0.85rem;
-            margin-top: 4px;
-            text-transform: uppercase;
-        }
-
-        .robot-label { 
-            font-size: 0.44rem; 
-            letter-spacing: 2px; 
-            color: #1e2e1c; 
-            text-transform: uppercase; 
-            display: block; 
-            margin-top: 8px;
-        }
-
     </style>
     <script type="importmap">
       {
@@ -151,13 +96,15 @@
     <!-- Fundo Ambiental que espelhará a TV (via YouTube API) -->
     <div id="ambient-bg" class="absolute inset-0 overflow-hidden bg-[#141414] flex justify-center items-center pointer-events-none" style="z-index: 0;">
         <div class="w-[150vw] h-[150vh] scale-x-[-1] opacity-40" style="filter: blur(80px); pointer-events: none;">
-            <div id="player-bg" style="width: 100%; height: 100%;"></div>
+            <!-- Construção do iframe explícito para não ser bloqueado pelo browser -->
+            <iframe id="player-bg-iframe" style="width: 100%; height: 100%; pointer-events: none; border: 0;" src="https://www.youtube.com/embed/videoseries?list=PL7nYDn3_K58TRUbhQzgFLDNlfhmQdJFUr&enablejsapi=1&autoplay=1&mute=1&controls=0&disablekb=1" allow="autoplay; encrypted-media"></iframe>
         </div>
     </div>
 
-    <div id="canvas-container" class="absolute inset-0" style="z-index: 10;"></div>
+    <!-- O Canvas WebGL tem pointer-events-none para que você possa clicar no YouTube Player na camada inferior -->
+    <div id="canvas-container" class="absolute inset-0 pointer-events-none" style="z-index: 10;"></div>
 
-    <div class="absolute inset-x-0 top-0 pointer-events-none flex justify-center pt-8 md:pt-16 lg:pt-20" style="z-index: 20;">
+    <div id="intro-text" class="absolute inset-x-0 top-0 pointer-events-none flex justify-center pt-8 md:pt-16 lg:pt-20" style="z-index: 20; opacity: 0; transition: opacity 3s ease-in-out;">
         <div class="wave-text">
             <span>p</span><span>a</span><span>l</span><span>i</span><span>p</span><span>a</span><span>l</span><span>a</span><span>n</span>
         </div>
@@ -168,50 +115,9 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
-        // --- INTEGRAÇÃO YOUTUBE API PARA SINCRONIZAÇÃO PERFEITA ---
+        // --- INTEGRAÇÃO YOUTUBE API ---
         let playerTv, playerBg;
         let isYtReady = false;
-
-        window.onYouTubeIframeAPIReady = function() {
-            const playlistId = 'PL7nYDn3_K58TRUbhQzgFLDNlfhmQdJFUr';
-            
-            // Fundo (Mudo e Desfocado)
-            playerBg = new YT.Player('player-bg', {
-                playerVars: { 
-                    autoplay: 1, mute: 1, controls: 0, disablekb: 1, 
-                    loop: 1, listType: 'playlist', list: playlistId 
-                },
-                events: {
-                    'onReady': () => {
-                        isYtReady = true;
-                        playerBg.mute(); // Força o mute garantido
-                    }
-                }
-            });
-
-            // TV Principal conectando ao iframe gerado dinamicamente
-            playerTv = new YT.Player('player-tv-iframe', {
-                events: {
-                    'onStateChange': (event) => {
-                        if (!isYtReady || !playerBg || !playerBg.playVideo) return;
-                        
-                        const state = event.data;
-                        if (state === 1) { // 1 = PLAYING
-                            const tvIndex = playerTv.getPlaylistIndex();
-                            // Atualiza a playlist perfeitamente se a TV saltar de música
-                            if (tvIndex !== playerBg.getPlaylistIndex()) {
-                                playerBg.playVideoAt(tvIndex);
-                            } else {
-                                playerBg.playVideo();
-                            }
-                        } else if (state === 2 || state === 3) { // 2 = PAUSED, 3 = BUFFERING
-                            // Fundo reflete perfeitamente quando a TV para
-                            playerBg.pauseVideo();
-                        }
-                    }
-                }
-            });
-        };
 
         // Injeta o script da API do YouTube
         const tag = document.createElement('script');
@@ -219,15 +125,15 @@
         const firstScriptTag = document.getElementsByTagName('script')[0];
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-
         // --- CONFIGURAÇÃO THREE.JS ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         const fogColor = new THREE.Color(0x141414); 
-        scene.fog = new THREE.FogExp2(fogColor, 0.015); // Névoa significativamente reduzida para ver as estrelas ao fundo
+        scene.fog = new THREE.FogExp2(fogColor, 0.015); 
 
         const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 200);
-        camera.position.set(0, 3, 10); 
+        // Câmera começa bem longe e alta para a animação de introdução
+        camera.position.set(0, 15, 60); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setClearColor(0x000000, 0); 
@@ -242,11 +148,12 @@
         cssRenderer.domElement.style.position = 'absolute';
         cssRenderer.domElement.style.top = '0px';
         cssRenderer.domElement.style.left = '0px';
-        cssRenderer.domElement.style.pointerEvents = 'none';
-        cssRenderer.domElement.style.zIndex = '15'; 
+        // Z-Index 5: Fica atrás do WebGL (10), o que permite à mesa 3D cobrir o ecrã se passar à frente!
+        cssRenderer.domElement.style.zIndex = '5'; 
+        cssRenderer.domElement.style.pointerEvents = 'auto'; // Captura os cliques no ecrã para o YouTube
         document.body.appendChild(cssRenderer.domElement);
 
-        const controls = new OrbitControls(camera, renderer.domElement);
+        const controls = new OrbitControls(camera, cssRenderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.minDistance = 2;
@@ -255,6 +162,11 @@
         controls.minAzimuthAngle = -Math.PI / 3;
         controls.maxAzimuthAngle = Math.PI / 3;
         controls.target.set(0, 1.5, 0);
+
+        // Desativa os controlos durante a viagem da câmara
+        controls.enabled = false;
+        let isIntroPlaying = true;
+        const targetCamPos = new THREE.Vector3(0, 3, 10); // Posição final da câmara
 
         const ambientLight = new THREE.AmbientLight(0x404040, 4.0);
         scene.add(ambientLight);
@@ -266,7 +178,6 @@
         moonLight.shadow.mapSize.height = 1024;
         scene.add(moonLight);
 
-        // Feixe de Luz Amarela
         const beamHeight = 15.0; 
         const beamZ = 3.0; 
         const beamLight = new THREE.SpotLight(0xffdd00, 40.0); 
@@ -300,23 +211,19 @@
         const beamMesh = new THREE.Mesh(beamGeo, beamMat);
         scene.add(beamMesh);
 
-        // --- CÉU ESTRELADO 3D (EM TODO O ESPAÇO) ---
-        
-        // 1. Sistema de Partículas 3D (As Estrelas Verdadeiras)
+        // --- CÉU ESTRELADO 3D ---
         const starsGeo = new THREE.BufferGeometry();
         const starsCount = 4000;
         const posArray = new Float32Array(starsCount * 3);
         const colorArray = new Float32Array(starsCount * 3);
 
         for(let i = 0; i < starsCount * 3; i+=3) {
-            // Distribuição ampla em todas as direções (X, Y, Z) formando uma caixa envolvente
-            posArray[i] = (Math.random() - 0.5) * 150;     // X
-            posArray[i+1] = (Math.random() - 0.5) * 150;   // Y (Agora também ocupa a parte superior, flutuando no espaço)
-            posArray[i+2] = (Math.random() - 0.5) * 150;   // Z
+            posArray[i] = (Math.random() - 0.5) * 150;     
+            posArray[i+1] = (Math.random() - 0.5) * 150;   
+            posArray[i+2] = (Math.random() - 0.5) * 150;   
 
-            // Cores vibrantes e aleatórias (espectro néon)
             const color = new THREE.Color();
-            color.setHSL(Math.random(), 0.9, 0.6); // Hue aleatório, alta saturação e luminosidade
+            color.setHSL(Math.random(), 0.9, 0.6); 
             colorArray[i] = color.r;
             colorArray[i+1] = color.g;
             colorArray[i+2] = color.b;
@@ -367,20 +274,295 @@
         rug.position.y = 0.025; rug.position.z = -0.8; rug.receiveShadow = true;
         scene.add(rug);
 
+        // --- MESA DE CENTRO E ACESSÓRIOS ---
+        const tableGroup = new THREE.Group();
+        tableGroup.position.set(0, 0.35, 2.5); 
+        scene.add(tableGroup);
+
+        const tableTopGeo = new THREE.BoxGeometry(4.5, 0.08, 1.4);
+        const tableTopMat = new THREE.MeshStandardMaterial({ color: 0x2a160b, roughness: 0.4, metalness: 0.2 });
+        const tableTop = new THREE.Mesh(tableTopGeo, tableTopMat);
+        tableTop.castShadow = true;
+        tableTop.receiveShadow = true;
+        tableGroup.add(tableTop);
+
+        const legGeo = new THREE.CylinderGeometry(0.04, 0.02, 0.31, 16);
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.4 });
+        const legPositions = [
+            [-2.0, -0.195, -0.5], [2.0, -0.195, -0.5],
+            [-2.0, -0.195, 0.5], [2.0, -0.195, 0.5]
+        ];
+        legPositions.forEach(pos => {
+            const leg = new THREE.Mesh(legGeo, legMat);
+            leg.position.set(pos[0], pos[1], pos[2]);
+            leg.castShadow = true;
+            tableGroup.add(leg);
+        });
+
+        // --- PLANTA PALIPALAN (Paepalanthus / Chuveirinho) ---
+        
+        // Vaso Rústico
+        const potGeo = new THREE.CylinderGeometry(0.12, 0.09, 0.15, 16);
+        const potMat = new THREE.MeshStandardMaterial({ color: 0x8a5a44, roughness: 0.9 }); // Terracota escurecida
+        const pot = new THREE.Mesh(potGeo, potMat);
+        pot.position.set(1.4, 0.115, 0.15); // Apoiado na mesa (y = 0.04 + 0.15/2)
+        pot.castShadow = true;
+        tableGroup.add(pot);
+
+        // Terra do vaso
+        const dirtGeo = new THREE.CylinderGeometry(0.11, 0.11, 0.02, 16);
+        const dirtMat = new THREE.MeshStandardMaterial({ color: 0x2b1c12, roughness: 1.0 });
+        const dirt = new THREE.Mesh(dirtGeo, dirtMat);
+        dirt.position.set(0, 0.07, 0); 
+        pot.add(dirt);
+
+        // Caule base (escamoso e alaranjado)
+        const baseStemGeo = new THREE.CylinderGeometry(0.02, 0.035, 0.1, 8);
+        const baseStemMat = new THREE.MeshStandardMaterial({ color: 0xd28f5a, roughness: 0.9 });
+        const baseStem = new THREE.Mesh(baseStemGeo, baseStemMat);
+        baseStem.position.set(0, 0.12, 0); 
+        pot.add(baseStem);
+
+        // Agrupamento para as hastes radiais
+        const stalksGroup = new THREE.Group();
+        stalksGroup.position.set(0, 0.05, 0); // No topo do caule
+        baseStem.add(stalksGroup);
+
+        // Geometrias partilhadas para performance
+        const stalkGeo = new THREE.CylinderGeometry(0.002, 0.003, 1, 4);
+        stalkGeo.rotateX(Math.PI / 2); // Alinhado com o eixo Z para facilitar o "lookAt"
+        const stalkMat = new THREE.MeshStandardMaterial({ color: 0xb5b582, roughness: 0.8 }); // Verde pálido/amarelado
+        
+        const headGeo = new THREE.SphereGeometry(0.012, 8, 8);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0xddddcc, roughness: 0.9 }); // Sementes esbranquiçadas
+        
+        // Ponto escuro no topo da semente
+        const dotGeo = new THREE.SphereGeometry(0.005, 4, 4);
+        const dotMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+
+        const numStalks = 180; // Bastante denso para criar o efeito "chuveirinho"
+        const goldenAngle = 2.39996323;
+
+        for (let i = 0; i < numStalks; i++) {
+            const t = i / (numStalks - 1);
+            // Distribuição em hemisfério (do topo y=1 até quase horizontal y=0.1)
+            const y = 1.0 - (t * 0.9); 
+            const radius = Math.sqrt(1 - y * y);
+            const theta = goldenAngle * i;
+
+            const x = Math.cos(theta) * radius;
+            const z = Math.sin(theta) * radius;
+
+            const pivot = new THREE.Group();
+            
+            // Comprimentos variam para fazer um domo imperfeito mas majestoso
+            const length = 0.4 + Math.random() * 0.1;
+
+            const stalk = new THREE.Mesh(stalkGeo, stalkMat);
+            stalk.scale.set(1, 1, length);
+            stalk.position.set(0, 0, length / 2);
+            pivot.add(stalk);
+
+            const headGroup = new THREE.Group();
+            headGroup.position.set(0, 0, length);
+            
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.scale.set(1, 0.7, 1); // Semente levemente achatada
+            headGroup.add(head);
+            
+            const dot = new THREE.Mesh(dotGeo, dotMat);
+            dot.position.set(0, 0.01, 0); // Ponto escuro no topo
+            headGroup.add(dot);
+
+            pivot.add(headGroup);
+
+            // Aponta o pivô (e consequentemente o eixo Z) para fora
+            pivot.lookAt(new THREE.Vector3(x, y, z));
+
+            stalksGroup.add(pivot);
+        }
+
+        // Cinzeiro (Aumentado em largura e espessura)
+        const ashtrayGeo = new THREE.TorusGeometry(0.16, 0.05, 16, 32);
+        const ashtrayMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1, metalness: 0.8 });
+        const ashtray = new THREE.Mesh(ashtrayGeo, ashtrayMat);
+        ashtray.position.set(0.6, 0.09, 0.3);
+        ashtray.rotation.x = Math.PI / 2;
+        ashtray.castShadow = true;
+        tableGroup.add(ashtray);
+
+        const ashtrayBase = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.02, 32), ashtrayMat);
+        ashtrayBase.position.set(0.6, 0.05, 0.3);
+        tableGroup.add(ashtrayBase);
+
+        // Cigarro (Reposicionado para encaixar na nova borda)
+        const cigGeo = new THREE.CylinderGeometry(0.012, 0.012, 0.15, 8);
+        const cigMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+        const cig = new THREE.Mesh(cigGeo, cigMat);
+        cig.position.set(0.72, 0.14, 0.3);
+        cig.rotation.z = Math.PI / 2;
+        cig.rotation.y = Math.PI / 4;
+        cig.castShadow = true;
+        tableGroup.add(cig);
+
+        const tipGeo = new THREE.CylinderGeometry(0.013, 0.013, 0.02, 8);
+        const tipMat = new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 2.5 });
+        const tip = new THREE.Mesh(tipGeo, tipMat);
+        tip.position.set(-0.075, 0, 0); 
+        cig.add(tip);
+
+        // Sistema de Fumaça (Shader de Partículas)
+        const smokeCount = 45;
+        const smokeGeo = new THREE.BufferGeometry();
+        const smokePos = new Float32Array(smokeCount * 3);
+        const smokeLife = new Float32Array(smokeCount);
+
+        for(let i = 0; i < smokeCount; i++) {
+            smokePos[i*3] = 0;
+            smokePos[i*3+1] = 0;
+            smokePos[i*3+2] = 0;
+            smokeLife[i] = Math.random(); 
+        }
+
+        smokeGeo.setAttribute('position', new THREE.BufferAttribute(smokePos, 3));
+        smokeGeo.setAttribute('life', new THREE.BufferAttribute(smokeLife, 1));
+
+        const smokeMat = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { value: 0 },
+                smokeColor: { value: new THREE.Color(0xdddddd) }
+            },
+            vertexShader: `
+                attribute float life;
+                varying float vLife;
+                uniform float time;
+                void main() {
+                    vLife = life;
+                    float currentLife = fract(life + time * 0.15); 
+                    
+                    vec3 pos = position;
+                    pos.y += currentLife * 1.5; 
+                    pos.x += sin(currentLife * 4.0 + life * 10.0) * 0.2 * currentLife; 
+                    pos.z += cos(currentLife * 3.0 + life * 10.0) * 0.2 * currentLife; 
+                    
+                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                    gl_Position = projectionMatrix * mvPosition;
+                    
+                    gl_PointSize = (15.0 + currentLife * 40.0) * (3.0 / -mvPosition.z);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 smokeColor;
+                varying float vLife;
+                uniform float time;
+                void main() {
+                    float currentLife = fract(vLife + time * 0.15);
+                    vec2 coord = gl_PointCoord - vec2(0.5);
+                    float dist = length(coord);
+                    if (dist > 0.5) discard;
+                    
+                    float alpha = smoothstep(0.0, 0.1, currentLife) * (1.0 - smoothstep(0.2, 1.0, currentLife));
+                    alpha *= (1.0 - (dist * 2.0)); 
+                    gl_FragColor = vec4(smokeColor, alpha * 0.12); 
+                }
+            `,
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.NormalBlending
+        });
+
+        const smoke = new THREE.Points(smokeGeo, smokeMat);
+        smoke.position.set(0.65, 0.14, 0.23); 
+        tableGroup.add(smoke);
+
+        // --- PILHA DE VINIS (LPs) NO LADO ESQUERDO ---
+        const vinylGroup = new THREE.Group();
+        // Posição base em cima do tampo esquerdo da mesa
+        vinylGroup.position.set(-1.2, 0.045, 0); 
+        tableGroup.add(vinylGroup);
+
+        const vinylSize = 0.8;
+        const vinylThickness = 0.01;
+        const vinylGeo = new THREE.BoxGeometry(vinylSize, vinylThickness, vinylSize);
+
+        // Posições orgânicas para que todas as 5 capas fiquem parcialmente visíveis
+        const vinylOffsets = [
+            { x: -0.15, z: -0.15, rot: -0.2, color: '#4a2511' }, // 1 (Fundo - esquerda/trás)
+            { x: 0.10,  z: -0.05, rot: 0.15, color: '#1a332a' }, // 2 (Direita)
+            { x: -0.05, z: 0.10,  rot: -0.05, color: '#22223b' },// 3 (Frente/Esquerda)
+            { x: 0.15,  z: 0.15,  rot: 0.25, color: '#4a3b11' }, // 4 (Frente/Direita)
+            { x: 0.0,   z: 0.05,  rot: 0.0,  color: '#3b1122' }  // 5 (Topo - Centro)
+        ];
+
+        // Função para gerar texturas placeholder via Canvas (Evita bugs de CORS de imagens da web)
+        function createVinylCover(index, colorHex) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512; canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Cor de fundo retro
+            ctx.fillStyle = colorHex;
+            ctx.fillRect(0, 0, 512, 512);
+            
+            // Design simples da capa
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 15;
+            ctx.strokeRect(25, 25, 462, 462);
+            
+            ctx.beginPath();
+            ctx.arc(256, 256, 180, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Texto central
+            ctx.font = 'bold 54px "Courier New"';
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('CAPA ' + index, 256, 240);
+            
+            ctx.font = '24px "Courier New"';
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.fillText('IMAGEM PLACEHOLDER', 256, 300);
+            
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            return tex;
+        }
+
+        // Criar e empilhar os 5 LPs
+        for (let i = 0; i < 5; i++) {
+            const coverTexture = createVinylCover(i + 1, vinylOffsets[i].color);
+            
+            const edgeMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.9 });
+            const coverMat = new THREE.MeshStandardMaterial({ map: coverTexture, roughness: 0.6 });
+            
+            // O material índice 2 corresponde ao topo (Face Y+) da BoxGeometry
+            // [direita, esquerda, topo, fundo, frente, trás]
+            const materials = [edgeMat, edgeMat, coverMat, edgeMat, edgeMat, edgeMat];
+
+            const vinyl = new THREE.Mesh(vinylGeo, materials);
+            
+            // Altura empilhada (i * espessura), mais o desfasamento orgânico em X e Z
+            vinyl.position.set(vinylOffsets[i].x, i * vinylThickness, vinylOffsets[i].z);
+            vinyl.rotation.y = vinylOffsets[i].rot;
+            
+            vinyl.castShadow = true;
+            vinyl.receiveShadow = true;
+            
+            vinylGroup.add(vinyl);
+        }
+
+
         // --- CONSTRUÇÃO DO CONJUNTO (MÓVEL E TV) ---
         const tvGroup = new THREE.Group();
 
-        // 1. MÓVEL (RACK) - Mantém o tamanho original
+        // 1. MÓVEL (RACK) 
         const rackGeo = new THREE.BoxGeometry(4.5, 0.8, 3.5);
-        const rackMat = new THREE.MeshStandardMaterial({ 
-            color: 0x4a2e1b, 
-            roughness: 0.6 
-        });
+        const rackMat = new THREE.MeshStandardMaterial({ color: 0x4a2e1b, roughness: 0.6 });
         const rack = new THREE.Mesh(rackGeo, rackMat);
         rack.position.set(0, 0.4, -0.8); rack.castShadow = true; rack.receiveShadow = true;
         tvGroup.add(rack);
 
-        // Pés metálicos redondos para o rack
         const footGeo = new THREE.CylinderGeometry(0.06, 0.03, 0.2, 16);
         const footMat = new THREE.MeshStandardMaterial({color: 0x888888, metalness: 0.8, roughness: 0.2});
         const feetPositions = [[-2.1, 0.1, 0.8], [2.1, 0.1, 0.8], [-2.1, 0.1, -2.4], [2.1, 0.1, -2.4]];
@@ -391,28 +573,23 @@
             tvGroup.add(foot);
         });
 
-        // 2. TELEVISÃO CRT (GRUPO INDEPENDENTE PARA ESCALAR)
+        // 2. TELEVISÃO CRT
         const tvHardwareGroup = new THREE.Group();
-        // Aumenta a TV em 25% (escala 1.25) em todos os eixos
         tvHardwareGroup.scale.set(1.25, 1.25, 1.25);
-        // Ajusta o eixo Y para compensar a escala e continuar perfeitamente encostada na base
         tvHardwareGroup.position.y = -0.20;
 
         const tvMat = new THREE.MeshStandardMaterial({ color: 0x1f1a18, roughness: 0.6 });
-        // Corpo frontal alargado (de 3.0 para 3.4) para acomodar o ecrã grande E os painéis laterais
         const tvFrontGeo = new THREE.BoxGeometry(3.4, 2.4, 0.6);
         const tvFront = new THREE.Mesh(tvFrontGeo, tvMat);
         tvFront.position.set(0, 2.0, 0); tvFront.castShadow = true; tvFront.receiveShadow = true;
         tvHardwareGroup.add(tvFront);
 
-        // Grelha de alto-falante na TV (Esquerda) - Reposicionada
         const speakerGrillGeo = new THREE.BoxGeometry(0.3, 1.6, 0.62);
         const speakerGrillMat = new THREE.MeshStandardMaterial({color: 0x0a0a0a, roughness: 0.9});
         const tvSpeaker = new THREE.Mesh(speakerGrillGeo, speakerGrillMat);
         tvSpeaker.position.set(-1.45, 2.0, 0.0);
         tvHardwareGroup.add(tvSpeaker);
 
-        // Botões Giratórios (Direita) - Reposicionados
         const tvKnobGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.05, 16);
         tvKnobGeo.rotateX(Math.PI / 2);
         const tvKnobMat = new THREE.MeshStandardMaterial({color: 0xaaaaaa, metalness: 0.6, roughness: 0.4});
@@ -423,12 +600,10 @@
         tvKnob2.position.set(1.45, 2.2, 0.31);
         tvHardwareGroup.add(tvKnob2);
         
-        // Botão de Power Vermelho - Reposicionado
         const tvPowerBtn = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.05), new THREE.MeshStandardMaterial({color: 0xcc0000}));
         tvPowerBtn.position.set(1.45, 1.5, 0.31);
         tvHardwareGroup.add(tvPowerBtn);
 
-        // Antena no topo da TV (Estilo "Orelhas de Coelho")
         const antBaseGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.05, 16);
         const antMat = new THREE.MeshStandardMaterial({color: 0x888888, metalness: 0.9, roughness: 0.2});
         const antBase = new THREE.Mesh(antBaseGeo, antMat);
@@ -444,33 +619,39 @@
         ant2.rotation.z = -Math.PI / 6;
         tvHardwareGroup.add(ant2);
 
-        // Corpo Central da caixa CRT alargado 
         const tvMidGeo = new THREE.BoxGeometry(3.0, 2.0, 1.2);
         const tvMid = new THREE.Mesh(tvMidGeo, tvMat);
         tvMid.position.set(0, 2.0, -0.9); tvMid.castShadow = true; tvMid.receiveShadow = true;
         tvHardwareGroup.add(tvMid);
 
-        // Traseira do tubo alargada
         const tvBackGeo = new THREE.BoxGeometry(2.0, 1.4, 1.2);
         const tvBack = new THREE.Mesh(tvBackGeo, tvMat);
         tvBack.position.set(0, 2.0, -2.1); tvBack.castShadow = true; tvBack.receiveShadow = true;
         tvHardwareGroup.add(tvBack);
 
-        // Moldura do Ecrã
         const frameGeo = new THREE.BoxGeometry(2.6, 2.0, 0.85);
         const frameMat = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.5 });
         const frame = new THREE.Mesh(frameGeo, frameMat);
         frame.position.set(0, 2.0, 0);
         tvHardwareGroup.add(frame);
 
-        // Fundo da Tela
+        // --- MÁSCARA INVISÍVEL (HOLE PUNCH PARA O IFRAME) ---
+        // Este material garante que qualquer cor que estivesse aqui no WebGL seja apagada e fique transparente.
         const screenGeo = new THREE.PlaneGeometry(2.4, 1.8);
-        const screenMat = new THREE.MeshStandardMaterial({ color: 0x020202, roughness: 0.2 });
+        const screenMat = new THREE.MeshBasicMaterial({
+            transparent: true,
+            opacity: 0, // Invisível
+            blending: THREE.CustomBlending,
+            blendEquation: THREE.AddEquation,
+            blendSrc: THREE.ZeroFactor,       // Limpa o canal de Cor
+            blendDst: THREE.ZeroFactor,
+            blendSrcAlpha: THREE.OneFactor,   // Limpa o canal Alpha (transparência)
+            blendDstAlpha: THREE.ZeroFactor
+        });
         const screen = new THREE.Mesh(screenGeo, screenMat);
         screen.position.set(0, 2.0, 0.33); 
         tvHardwareGroup.add(screen);
 
-        // Vidro CRT convexo refletivo sobre a tela (Corrigido para cobrir o ecrã todo)
         const glassGeo = new THREE.PlaneGeometry(2.45, 1.85, 16, 16);
         const glassPos = glassGeo.attributes.position;
         for(let i=0; i<glassPos.count; i++) {
@@ -480,8 +661,8 @@
             glassPos.setZ(i, bulge);
         }
         glassGeo.computeVertexNormals();
-        const glassMat = new THREE.MeshPhysicalMaterial({
-            color: 0xffffff, transmission: 1.0, opacity: 1, metalness: 0.2, roughness: 0.05, ior: 1.5, thickness: 0.5
+        const glassMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.1, metalness: 0.8, roughness: 0.1
         });
         const glassMesh = new THREE.Mesh(glassGeo, glassMat);
         glassMesh.position.set(0, 2.0, 0.35); 
@@ -492,19 +673,20 @@
         divInfo.style.width = '1024px'; divInfo.style.height = '768px'; divInfo.style.backgroundColor = '#000';
         divInfo.style.pointerEvents = 'auto';
         
+        // Em vez de usar um div vazio, criamos o iframe diretamente para o YouTube o agarrar.
         const iframeTv = document.createElement('iframe');
         iframeTv.id = 'player-tv-iframe';
         iframeTv.style.width = '100%'; 
         iframeTv.style.height = '100%'; 
         iframeTv.style.border = '0'; 
         iframeTv.style.pointerEvents = 'auto'; 
-        iframeTv.src = 'https://www.youtube.com/embed/videoseries?list=PL7nYDn3_K58TRUbhQzgFLDNlfhmQdJFUr&enablejsapi=1&autoplay=1&mute=0';
+        // Inicia mutado de forma rígida no URL para garantir que arranca no Chrome/Safari. O utilizador pode desmutar depois.
+        iframeTv.src = 'https://www.youtube.com/embed/videoseries?list=PL7nYDn3_K58TRUbhQzgFLDNlfhmQdJFUr&enablejsapi=1&autoplay=1&mute=1';
         iframeTv.allow = 'autoplay; encrypted-media; picture-in-picture'; 
         iframeTv.allowFullscreen = true;
         divInfo.appendChild(iframeTv);
 
         const cssObject = new CSS3DObject(divInfo);
-        // Escala corrigida para caber nos 2.4 de largura (1024 * 0.00234375 = 2.4)
         cssObject.scale.set(0.00234375, 0.00234375, 0.00234375);
         cssObject.position.set(0, 2.0, 0.34); 
         tvHardwareGroup.add(cssObject);
@@ -514,32 +696,100 @@
         tvLight.castShadow = true;
         tvHardwareGroup.add(tvLight);
 
-        // Adiciona a TV completa e escalada ao grupo principal
+        // --- ADESIVO NA LATERAL DA TV ---
+        const stickerTexture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/palipalan/palipalan/main/30D30B26_X.png');
+        stickerTexture.colorSpace = THREE.SRGBColorSpace; 
+        
+        const stickerMat = new THREE.MeshStandardMaterial({
+            map: stickerTexture, transparent: true, roughness: 0.8, metalness: 0.1, alphaTest: 0.05 
+        });
+        const stickerGeo = new THREE.PlaneGeometry(0.8, 0.8);
+        const stickerMesh = new THREE.Mesh(stickerGeo, stickerMat);
+        stickerMesh.position.set(-1.51, 2.2, -1.1); 
+        stickerMesh.rotation.y = -Math.PI / 2; 
+        stickerMesh.rotation.z = 0.15; 
+        tvHardwareGroup.add(stickerMesh);
         tvGroup.add(tvHardwareGroup);
 
 
-        // --- DISPLAY REATIVO (SENSORY MODULE) NO RACK ---
-        // Moldura metálica skeuomorfista para o display do robô
-        const trimGeo = new THREE.BoxGeometry(1.35, 0.45, 0.05);
-        const trimMat = new THREE.MeshStandardMaterial({color: 0x333333, metalness: 0.8, roughness: 0.4});
-        const trimMesh = new THREE.Mesh(trimGeo, trimMat);
-        trimMesh.position.set(-0.8, 0.4, 0.95);
-        tvGroup.add(trimMesh);
+        // --- ENTRADA VHS E FITA (ESTILO SKEUOMORFISTA) ---
+        const vhsFrameGeo = new THREE.BoxGeometry(1.8, 0.45, 0.05);
+        const vhsFrameMat = new THREE.MeshStandardMaterial({color: 0x1a1a1a, roughness: 0.8});
+        const vhsFrame = new THREE.Mesh(vhsFrameGeo, vhsFrameMat);
+        vhsFrame.position.set(-0.8, 0.4, 0.95);
+        tvGroup.add(vhsFrame);
 
-        const robotDiv = document.createElement('div');
-        robotDiv.className = 'robot-screen';
-        robotDiv.innerHTML = `
-            <span class="robot-face-line" id="robot-face">^ _ ^</span>
-            <span class="robot-status-line" id="robot-status">AGUARDANDO BATIDA</span>
-            <span class="robot-label">ANALISADOR DE FREQUÊNCIA</span>
-        `;
-        const robotObj = new CSS3DObject(robotDiv);
-        robotObj.scale.set(0.005, 0.005, 0.005);
-        robotObj.position.set(-0.8, 0.4, 0.96); 
-        tvGroup.add(robotObj);
+        const vhsHoleGeo = new THREE.BoxGeometry(1.6, 0.22, 0.06);
+        const vhsHoleMat = new THREE.MeshBasicMaterial({color: 0x000000});
+        const vhsHole = new THREE.Mesh(vhsHoleGeo, vhsHoleMat);
+        vhsHole.position.set(-0.8, 0.4, 0.96);
+        tvGroup.add(vhsHole);
 
-        const faceEl = robotDiv.querySelector('#robot-face');
-        const statusEl = robotDiv.querySelector('#robot-status');
+        const vhsTapeGroup = new THREE.Group();
+        // Empurrada mais para dentro (de 1.20 para 1.05)
+        vhsTapeGroup.position.set(-0.8, 0.4, 1.05);
+        vhsTapeGroup.rotation.x = 0; 
+
+        const tapeGeo = new THREE.BoxGeometry(1.4, 0.20, 0.9);
+        const tapeMat = new THREE.MeshStandardMaterial({color: 0x121212, roughness: 0.7, metalness: 0.1});
+        const tapeMesh = new THREE.Mesh(tapeGeo, tapeMat);
+        tapeMesh.castShadow = true;
+        vhsTapeGroup.add(tapeMesh);
+
+        // Textura do Adesivo Gerada Dinamicamente em Canvas (Para escrita manuscrita)
+        const labelGeo = new THREE.PlaneGeometry(1.15, 0.45);
+        const labelCanvas = document.createElement('canvas');
+        labelCanvas.width = 512;
+        labelCanvas.height = 200;
+        const lctx = labelCanvas.getContext('2d');
+        const labelTexture = new THREE.CanvasTexture(labelCanvas);
+        labelTexture.colorSpace = THREE.SRGBColorSpace;
+
+        function drawLabel() {
+            // Fundo de papel
+            lctx.fillStyle = '#eae6cf';
+            lctx.fillRect(0, 0, labelCanvas.width, labelCanvas.height);
+            
+            // Faixa vermelha inferior
+            lctx.fillStyle = '#ba1a1a';
+            lctx.fillRect(0, labelCanvas.height - 36, labelCanvas.width, 36);
+            
+            // Texto com marcador manuscrito
+            lctx.font = '28px "Permanent Marker", cursive'; // Fonte reduzida de 36px para 28px
+            lctx.fillStyle = '#111118';
+            lctx.textAlign = 'center';
+            lctx.textBaseline = 'middle';
+            
+            lctx.save();
+            // Posição movida mais para baixo (de -12 para +15)
+            lctx.translate(labelCanvas.width / 2, labelCanvas.height / 2 + 15);
+            lctx.rotate(-0.03); // Tinta ligeiramente torta
+            lctx.fillText('Palipalan // #30dias30beats', 0, 0);
+            lctx.restore();
+            
+            labelTexture.needsUpdate = true;
+        }
+        
+        drawLabel(); // Desenha imediatamente
+        document.fonts.ready.then(drawLabel); // Redesenha assim que a fonte Web carregar totalmente
+
+        const labelMat = new THREE.MeshStandardMaterial({map: labelTexture, roughness: 0.9});
+        const labelMesh = new THREE.Mesh(labelGeo, labelMat);
+        labelMesh.rotation.x = -Math.PI / 2;
+        labelMesh.position.set(0, 0.101, 0.15); 
+        vhsTapeGroup.add(labelMesh);
+
+        // Janelas da Fita
+        const spoolGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.01, 16);
+        const spoolMat = new THREE.MeshStandardMaterial({color: 0x050505, roughness: 0.5});
+        const spool1 = new THREE.Mesh(spoolGeo, spoolMat);
+        spool1.position.set(-0.35, 0.102, -0.05);
+        vhsTapeGroup.add(spool1);
+        const spool2 = new THREE.Mesh(spoolGeo, spoolMat);
+        spool2.position.set(0.35, 0.102, -0.05);
+        vhsTapeGroup.add(spool2);
+        
+        tvGroup.add(vhsTapeGroup);
 
         const controlsGroup = new THREE.Group();
         const knobBaseGeo = new THREE.CylinderGeometry(0.08, 0.09, 0.02, 16); knobBaseGeo.rotateX(Math.PI / 2);
@@ -563,8 +813,52 @@
             reactiveMats.push(mat); reactiveMeshes.push(mesh);
         }
         tvGroup.add(controlsGroup);
-
         scene.add(tvGroup);
+
+
+        // --- INICIALIZADOR SEGURO DA API YOUTUBE ---
+        function initYouTubePlayers() {
+            // Liga a API aos iframes físicos que criámos
+            playerBg = new window.YT.Player('player-bg-iframe', {
+                events: {
+                    'onReady': (event) => { 
+                        isYtReady = true; 
+                        event.target.mute(); 
+                        event.target.playVideo(); // Força o fundo a começar a tocar assim que carrega
+                    }
+                }
+            });
+
+            playerTv = new window.YT.Player('player-tv-iframe', {
+                events: {
+                    'onReady': (event) => {
+                        event.target.mute(); // Mudo no início para o autoplay funcionar
+                        event.target.playVideo();
+                    },
+                    'onStateChange': (event) => {
+                        if (!isYtReady || !playerBg || !playerBg.playVideo) return;
+                        const state = event.data;
+                        if (state === 1) { // 1 = Reproduzir
+                            const tvIndex = playerTv.getPlaylistIndex();
+                            if (tvIndex !== playerBg.getPlaylistIndex()) {
+                                playerBg.playVideoAt(tvIndex);
+                            } else {
+                                playerBg.playVideo();
+                            }
+                        } else if (state === 2 || state === 3) { // 2 = Pausa, 3 = A carregar
+                            playerBg.pauseVideo();
+                        }
+                    }
+                }
+            });
+        }
+
+        // Aguarda que a API e o DOM estejam prontos antes de chamar
+        if (window.YT && window.YT.Player) {
+            initYouTubePlayers();
+        } else {
+            window.onYouTubeIframeAPIReady = initYouTubePlayers;
+        }
 
 
         // --- LOOP PRINCIPAL E LÓGICA DE SINCRONIZAÇÃO ---
@@ -575,31 +869,47 @@
             const time = clock.getElapsedTime();
 
             if (rugMat.userData.shader) rugMat.userData.shader.uniforms.time.value = time;
+            if (smokeMat) smokeMat.uniforms.time.value = time; 
             
-            // Rotação suave do céu estrelado
             starField.rotation.y = time * 0.02;
 
-            // Lógica de Sincronização Contínua dos Vídeos (Micro-ajustes de velocidade)
+            // --- LÓGICA DO ZOOM INICIAL ---
+            if (isIntroPlaying) {
+                // Interpolação linear para movimento suave (Efeito "Ease Out")
+                camera.position.lerp(targetCamPos, 0.015);
+                camera.lookAt(0, 1.5, 0);
+                
+                // Verifica se chegou ao destino
+                if (camera.position.distanceTo(targetCamPos) < 0.5) {
+                    isIntroPlaying = false;
+                    controls.enabled = true; // Liberta os controlos para o utilizador
+                    controls.update(); // Sincroniza a posição atual
+                    
+                    const introText = document.getElementById('intro-text');
+                    if (introText) introText.style.opacity = '1'; // Faz o letreiro surgir
+                }
+            } else {
+                controls.update(); // Só atualiza os controlos de órbita após a viagem
+            }
+
             if (isYtReady && playerTv && playerBg && playerTv.getPlayerState && playerBg.getPlayerState) {
                 if (playerTv.getPlayerState() === 1 && playerBg.getPlayerState() === 1) {
                     const tvTime = playerTv.getCurrentTime();
                     const bgTime = playerBg.getCurrentTime();
                     const diff = tvTime - bgTime;
                     
-                    // Ajuste de velocidade em tempo real para sincronização simultânea sem travamentos!
                     if (Math.abs(diff) > 1.5) {
                         playerBg.seekTo(tvTime, true);
                     } else if (diff > 0.15) {
-                        playerBg.setPlaybackRate(1.25); // Fundo acelera para alcançar
+                        playerBg.setPlaybackRate(1.25); 
                     } else if (diff < -0.15) {
-                        playerBg.setPlaybackRate(0.75); // Fundo abranda para esperar
+                        playerBg.setPlaybackRate(0.75); 
                     } else {
-                        playerBg.setPlaybackRate(1.0);  // Sincronizado perfeitamente
+                        playerBg.setPlaybackRate(1.0);  
                     }
                 }
             }
 
-            // Batidas Falsas (Reatividade Visual)
             const beat1 = Math.pow(Math.sin(time * 5.0), 4);
             const beat2 = Math.pow(Math.cos(time * 2.5), 2);
             const randomSpike = Math.random() > 0.95 ? Math.random() : 0;
@@ -610,34 +920,11 @@
                 mesh.position.z = 0.96 + intensity * 0.03; 
             });
 
-            if (faceEl && statusEl && Math.floor(time * 12) % 3 === 0) { 
-                if (randomSpike > 0.5) { 
-                    faceEl.innerText = "O _ O"; 
-                    statusEl.innerText = "PICO DE GRAVE!";
-                    faceEl.style.color = "#ff0055";
-                    faceEl.style.textShadow = "0 0 9px #ff0055";
-                } else if (beat1 > 0.8) { 
-                    faceEl.innerText = "> _ <"; 
-                    statusEl.innerText = "LENDO BATIDA...";
-                    faceEl.style.color = "#00e060";
-                    faceEl.style.textShadow = "0 0 9px #00e060";
-                } else if (beat2 > 0.7) { 
-                    faceEl.innerText = "^ _ ^"; 
-                    statusEl.innerText = "SINCRONIZADO";
-                } else {
-                    faceEl.innerText = "- _ -";
-                    statusEl.innerText = "AGUARDANDO BATIDA";
-                    faceEl.style.color = "#00e060";
-                    faceEl.style.textShadow = "0 0 9px #00e060";
-                }
-            }
-
             const pulse = Math.sin(time * 3);
             beamLight.intensity = 30.0 + pulse * 10.0;
             beamMat.uniforms.beamOpacity.value = 0.08 + pulse * 0.03;
             tvLight.intensity = 1.5 + Math.random() * 0.4;
 
-            controls.update();
             renderer.render(scene, camera);
             cssRenderer.render(scene, camera); 
         }
